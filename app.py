@@ -12,8 +12,15 @@ API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 st.markdown("""
 <style>
     .stApp { background: #0f0c29; color: white; }
-    .card { background: rgba(255, 255, 255, 0.05); border: 1px solid #00f2fe; border-radius: 15px; padding: 15px; margin-bottom: 15px; position: relative; }
-    .score-exact { font-size: 32px; color: #00f2fe; font-weight: bold; text-align: center; }
+    .card { 
+        background: rgba(255, 255, 255, 0.05); 
+        border: 1px solid #00f2fe; 
+        border-radius: 15px; 
+        padding: 15px; 
+        margin-bottom: 15px; 
+    }
+    .score-exact { font-size: 38px; color: #00f2fe; font-weight: bold; text-align: center; }
+    .time-badge { color: #ff0055; font-weight: bold; font-size: 14px; }
     .footer {
         position: fixed; left: 0; bottom: 0; width: 100%;
         background-color: rgba(15, 12, 41, 0.95); color: #00f2fe;
@@ -22,11 +29,11 @@ st.markdown("""
     .btn-share {
         background-color: #25d366 !important;
         color: white !important;
-        padding: 8px 15px !important;
-        border-radius: 25px !important;
+        padding: 6px 15px !important;
+        border-radius: 20px !important;
         text-decoration: none !important;
         font-weight: bold !important;
-        font-size: 14px !important;
+        font-size: 12px !important;
         display: inline-block !important;
     }
 </style>
@@ -54,13 +61,12 @@ def get_all_leagues_data():
     except: return None, None
 
 def predict_score(h_n, a_n, stats):
-    if h_n not in stats or a_n not in stats: return 1, 0
+    if h_n not in stats or a_n not in stats: return 1, 1
     exp_h = (stats[h_n]['gf'] + stats[a_n]['ga']) / 2
     exp_a = (stats[a_n]['gf'] + stats[h_n]['ga']) / 2
     if stats[h_n]['rank'] < stats[a_n]['rank']: exp_h += 0.5
     else: exp_a += 0.5
-    exp_h *= 1.15
-    return max(0, round(exp_h + random.uniform(-0.3, 0.3))), max(0, round(exp_a + random.uniform(-0.3, 0.3)))
+    return max(0, round(exp_h + random.uniform(-0.2, 0.2))), max(0, round(exp_a + random.uniform(-0.2, 0.2)))
 
 stats, all_matches = get_all_leagues_data()
 
@@ -72,23 +78,23 @@ if stats and all_matches:
     today_str = now.strftime('%Y-%m-%d')
 
     with tab1:
-        today_matches = [m for m in all_matches if m['utcDate'].startswith(today_str)]
-        if not today_matches: st.info("Pas de matchs majeurs aujourd'hui.")
-        for m in today_matches:
+        matches_today = [m for m in all_matches if m['utcDate'].startswith(today_str)]
+        if not matches_today: st.info("Pas de matchs aujourd'hui.")
+        for m in matches_today:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
             p_h, p_a = predict_score(h_n, a_n, stats)
-            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ Prono Houzdane.Bdess : {h_n} {p_h}-{p_a} {a_n}')}"
+            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ Prono {h_n} {p_h}-{p_a} {a_n}')}"
             st.markdown(f"""
             <div class="card">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#ff0055; font-weight:bold;">🕒 {dt.strftime('%H:%M')}</span>
+                    <span class="time-badge">🕒 {dt.strftime('%H:%M')}</span>
                     <a href="{link_wa}" target="_blank" class="btn-share">📲 PARTAGER</a>
                 </div>
-                <div style="display:flex; justify-content:space-around; align-items:center; margin-top:10px;">
-                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="40"><br>{h_n}</div>
+                <div style="display:flex; justify-content:space-around; align-items:center; margin-top:15px;">
+                    <div style="text-align:center; width:30%;"><img src="{stats.get(h_n,{}).get('logo','')}" width="50"><br><small>{h_n}</small></div>
                     <div class="score-exact">{p_h} - {p_a}</div>
-                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="40"><br>{a_n}</div>
+                    <div style="text-align:center; width:30%;"><img src="{stats.get(a_n,{}).get('logo','')}" width="50"><br><small>{a_n}</small></div>
                 </div>
             </div>""", unsafe_allow_html=True)
 
@@ -98,17 +104,12 @@ if stats and all_matches:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
             p_h, p_a = predict_score(h_n, a_n, stats)
-            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ {h_n} vs {a_n} : {p_h}-{p_a}')}"
-            st.markdown(f"""
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#aaa;">📅 {dt.strftime('%d/%m à %H:%M')}</span>
-                    <a href="{link_wa}" target="_blank" class="btn-share">📲 PARTAGER</a>
-                </div>
-                <div style="display:flex; justify-content:space-around; align-items:center; margin-top:5px;">
-                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="35"><br><small>{h_n}</small></div>
+            st.markdown(f"""<div class="card">
+                <span style="color:#aaa;">📅 {dt.strftime('%d/%m à %H:%M')}</span>
+                <div style="display:flex; justify-content:space-around; align-items:center;">
+                    <div style="text-align:center; width:30%;"><img src="{stats.get(h_n,{}).get('logo','')}" width="40"><br><small>{h_n}</small></div>
                     <div style="font-size:24px; font-weight:bold; color:#00f2fe;">{p_h} - {p_a}</div>
-                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="35"><br><small>{a_n}</small></div>
+                    <div style="text-align:center; width:30%;"><img src="{stats.get(a_n,{}).get('logo','')}" width="40"><br><small>{a_n}</small></div>
                 </div>
             </div>""", unsafe_allow_html=True)
 
@@ -117,8 +118,9 @@ if stats and all_matches:
         for m in past[:15]:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             r_h, r_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
-            st.markdown(f"""<div class="card"><div style="display:flex; align-items:center; gap:15px;"><img src="{stats.get(h_n,{}).get('logo','')}" width="20"> {h_n} <b>{r_h} - {r_a}</b> {a_n} <img src="{stats.get(a_n,{}).get('logo','')}" width="20"></div></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="card"><img src="{stats.get(h_n,{}).get('logo','')}" width="20"> {h_n} <b>{r_h} - {r_a}</b> {a_n} <img src="{stats.get(a_n,{}).get('logo','')}" width="20"></div>""", unsafe_allow_html=True)
 
-    st.markdown("""<div style="height:80px;"></div><div class="footer">🚀 ALPHA-ORACLE by Houzdane.Bdess</div>""", unsafe_allow_html=True)
+    st.markdown('<div style="height:100px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="footer">🚀 ALPHA-ORACLE by Houzdane.Bdess</div>', unsafe_allow_html=True)
 else:
-    st.error("Données indisponibles pour le moment.")
+    st.error("Données indisponibles.")
