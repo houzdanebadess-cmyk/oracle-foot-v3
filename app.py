@@ -1,120 +1,129 @@
 import streamlit as st
 import requests
 import random
-import math
+from datetime import datetime
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="ALPHA-ORACLE ELITE", layout="wide")
+st.set_page_config(page_title="ALPHA-ORACLE", layout="wide")
+
 API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 
-# --- DESIGN PREMIUM FOOTBALL ---
+# --- STYLE CSS SÉCURISÉ ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0d1117; color: white; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #161b22; padding: 10px; border-radius: 10px; gap: 10px; }
-    .stTabs [data-baseweb="tab"] { height: 45px; background-color: #21262d; border-radius: 8px; color: #8b949e; }
-    .stTabs [aria-selected="true"] { background-color: #238636 !important; color: white !important; }
-    
-    .carte-match { 
-        background: #1c2128; border: 1px solid #30363d; border-radius: 15px; 
-        padding: 20px; margin-bottom: 20px;
-    }
-    .score-reel { font-size: 35px; font-weight: 900; color: #f85149; text-align: center; }
-    .tableau-oracle { width: 100%; border-collapse: collapse; margin-top: 15px; }
-    .tableau-oracle td { padding: 12px; text-align: center; border: 1px solid #333; background: rgba(0,0,0,0.1); }
-    .label-ia { color: #58a6ff; font-size: 10px; text-transform: uppercase; }
-    .label-reel { color: #3fb950; font-size: 10px; text-transform: uppercase; }
+    .stApp { background-color: #0f0c29; color: white; }
+    .match-card { background: rgba(255,255,255,0.05); border: 1px solid #00f2fe; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+    .score-ia { font-size: 38px; color: #00f2fe; font-weight: bold; line-height: 1; }
+    .score-live { font-size: 38px; color: #ff0055; font-weight: bold; line-height: 1; animation: blink 1s infinite; }
+    .score-finished { font-size: 38px; color: #25d366; font-weight: bold; line-height: 1; }
+    @keyframes blink { 50% { opacity: 0.4; } }
 </style>
 """, unsafe_allow_html=True)
 
-# --- MOTEUR DE CALCUL FOOTBALL (POISSON xG) ---
-def moteur_football(m_id, dom, ext):
-    random.seed(m_id)
-    # Simulation d'une moyenne de buts réaliste pour le foot (1.3 à 1.6 par match)
-    lambda_dom = 1.5 + random.uniform(-0.4, 0.4)
-    lambda_ext = 1.2 + random.uniform(-0.4, 0.4)
-    
-    def sim_poisson(lam):
-        L, k, p = math.exp(-lam), 0, 1
-        while p > L:
-            k += 1
-            p *= random.random()
-        return k - 1
-
-    # On plafonne pour éviter tout score de basket
-    f_h = min(4, sim_poisson(lambda_dom))
-    f_a = min(3, sim_poisson(lambda_ext))
-    
-    # Mi-temps logique
-    m_h = random.randint(0, math.floor(f_h/2) if f_h > 0 else 0)
-    m_a = random.randint(0, math.floor(f_a/2) if f_a > 0 else 0)
-    
-    v_ia = dom if f_h > f_a else ext if f_a > f_h else "MATCH NUL"
-    return f"{m_h}-{m_a}", f"{f_h}-{f_a}", v_ia
-
-# --- CHARGEMENT API ---
 @st.cache_data(ttl=60)
-def charger_donnees():
+def get_data():
+    headers = {'X-Auth-Token': API_KEY}
+    all_matches, all_logos = [], {}
     try:
-        r = requests.get("https://api.football-data.org/v4/matches", headers={'X-Auth-Token': API_KEY}).json()
-        return r.get('matches', [])
-    except: return []
+        for lg in ['FL1', 'PL', 'CL']:
+            s = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/standings", headers=headers).json()
+            if 'standings' in s:
+                for t in s['standings'][0]['table']:
+                    all_logos[t['team']['name']] = t['team']['crest']
+            m = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/matches", headers=headers).json()
+            if 'matches' in m: all_matches.extend(m['matches'])
+        return all_matches, all_logos
+    except:
+        return [], {}
 
-# --- INTERFACE ---
-st.title("🎯 ALPHA-ORACLE ELITE")
-matchs = charger_donnees()
+matches, logos = get_data()
 
-if matchs:
-    t1, t2, t3 = st.tabs(["⚽ DIRECT / JOUR", "📅 CALENDRIER", "📊 HISTORIQUE"])
-
-    def card(m):
-        dom, ext = m['homeTeam']['name'], m['awayTeam']['name']
-        mt_ia, ft_ia, v_ia = moteur_football(m['id'], dom, ext)
-        r_h, r_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
-        r_mt = f"{m['score']['halfTime']['home'] or 0}-{m['score']['halfTime']['away'] or 0}"
-
-        st.markdown(f"""
-        <div class="carte-match">
-            <div style="display:flex; justify-content:space-between; font-size:11px; color:#8b949e; margin-bottom:15px;">
-                <span>🕒 {m['utcDate'][11:16]} | {m['competition']['name']}</span>
-                <span style="color:#f85149; font-weight:bold;">{m['status']}</span>
+# --- FONCTION POUR CRÉER UNE CARTE PARFAITE ---
+def afficher_carte(m):
+    h_team = m['homeTeam']['name']
+    a_team = m['awayTeam']['name']
+    h_logo = logos.get(h_team, "https://crests.football-data.org/default.png")
+    a_logo = logos.get(a_team, "https://crests.football-data.org/default.png")
+    
+    status = m['status']
+    
+    # Formatage de la date et de l'heure
+    dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
+    date_str = dt.strftime("%d/%m/%Y")
+    heure_str = dt.strftime("%H:%M")
+    
+    # Récupération du score réel
+    r_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0
+    r_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0
+    
+    # Prédiction IA fixe
+    random.seed(m['id'])
+    p_h, p_a = random.randint(0, 3), random.randint(0, 2)
+    
+    # Logique d'affichage selon l'état du match
+    if status in ['IN_PLAY', 'PAUSED']:
+        classe_score = "score-live"
+        txt_score = f"{r_h} - {r_a}"
+        titre_score = "SCORE RÉEL"
+        badge = "<span style='background:#ff0055; padding:3px 8px; border-radius:5px; font-size:11px; font-weight:bold;'>🔴 EN DIRECT</span>"
+    elif status == 'FINISHED':
+        classe_score = "score-finished"
+        txt_score = f"{r_h} - {r_a}"
+        titre_score = "SCORE FINAL"
+        badge = "<span style='background:#25d366; padding:3px 8px; border-radius:5px; font-size:11px; font-weight:bold;'>✅ TERMINÉ</span>"
+    else:
+        classe_score = "score-ia"
+        txt_score = f"{p_h} - {p_a}"
+        titre_score = "SCORE IA"
+        badge = "<span style='background:#555; padding:3px 8px; border-radius:5px; font-size:11px; font-weight:bold;'>⏳ À VENIR</span>"
+        
+    html = f"""
+    <div class="match-card">
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-size:12px; color:#aaa; font-weight:bold;">
+            <span>📅 {date_str} | 🕒 {heure_str} UTC</span>
+            {badge}
+        </div>
+        <div style="display:flex; justify-content:space-around; align-items:center;">
+            <div style="text-align:center; width:30%;">
+                <img src="{h_logo}" width="50" style="margin-bottom:8px;"><br>
+                <span style="font-size:13px; font-weight:bold;">{h_team}</span>
             </div>
-            
-            <div style="display:flex; justify-content:space-around; align-items:center; text-align:center;">
-                <div style="width:35%;">
-                    <img src="{m['homeTeam'].get('crest','')}" width="45"><br>
-                    <b style="font-size:13px;">{dom[:15]}</b>
-                </div>
-                <div style="width:30%;" class="score-reel">
-                    {r_h if r_h is not None else '?'} - {r_a if r_a is not None else '?'}
-                </div>
-                <div style="width:35%;">
-                    <img src="{m['awayTeam'].get('crest','')}" width="45"><br>
-                    <b style="font-size:13px;">{ext[:15]}</b>
+            <div style="width:40%; text-align:center;">
+                <div style="font-size:11px; color:#aaa; margin-bottom:5px; letter-spacing:1px;">{titre_score}</div>
+                <div class="{classe_score}">{txt_score}</div>
+                <div style="color:#00f2fe; font-size:13px; margin-top:8px; font-weight:bold; background:rgba(0,242,254,0.1); padding:4px; border-radius:5px;">
+                    PRONO IA : {p_h} - {p_a}
                 </div>
             </div>
-
-            <table class="tableau-oracle">
-                <tr>
-                    <td><span class="label-reel">RÉEL MT</span><br><b>{r_mt}</b></td>
-                    <td style="background:rgba(88,166,255,0.05);"><span class="label-ia">ORACLE MT</span><br><b>{mt_ia}</b></td>
-                </tr>
-                <tr>
-                    <td><span class="label-reel">RÉEL FINAL</span><br><b>{r_h if r_h is not None else 0}-{r_a if r_a is not None else 0}</b></td>
-                    <td style="background:rgba(88,166,255,0.05);"><span class="label-ia">ORACLE FINAL</span><br><b>{ft_ia}</b></td>
-                </tr>
-            </table>
-            <div style="text-align:center; color:#ffca28; font-weight:bold; margin-top:15px; border-top:1px solid #333; padding-top:10px;">
-                🏆 PRÉDICTION : {v_ia.upper()}
+            <div style="text-align:center; width:30%;">
+                <img src="{a_logo}" width="50" style="margin-bottom:8px;"><br>
+                <span style="font-size:13px; font-weight:bold;">{a_team}</span>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
-    with t1:
-        for m in [m for m in matchs if m['status'] in ['IN_PLAY', 'PAUSED', 'TIMED']][:20]: card(m)
-    with t2:
-        for m in [m for m in matchs if m['status'] == 'SCHEDULED'][:15]: card(m)
-    with t3:
-        for m in [m for m in matchs if m['status'] == 'FINISHED'][::-1][:15]: card(m)
+st.title("🎯 ALPHA-ORACLE by Houzdane.Bdess")
+
+if matches:
+    tab1, tab2, tab3 = st.tabs(["⚽ MATCHS DU JOUR", "📅 CALENDRIER", "📊 COMPARATEUR"])
+    date_ajd = datetime.utcnow().strftime('%Y-%m-%d')
+
+    with tab1:
+        matchs_ajd = [m for m in matches if m['utcDate'].startswith(date_ajd)]
+        if not matchs_ajd:
+            st.info("Aucun match prévu pour aujourd'hui.")
+        for m in matchs_ajd:
+            afficher_carte(m)
+
+    with tab2:
+        a_venir = [m for m in matches if m['status'] in ['TIMED', 'SCHEDULED'] and not m['utcDate'].startswith(date_ajd)]
+        for m in a_venir[:10]:
+            afficher_carte(m)
+
+    with tab3:
+        termines = [m for m in matches if m['status'] == 'FINISHED' and not m['utcDate'].startswith(date_ajd)][::-1]
+        for m in termines[:10]:
+            afficher_carte(m)
 else:
-    st.error("Données API indisponibles.")
+    st.error("Données indisponibles. L'API charge...")
