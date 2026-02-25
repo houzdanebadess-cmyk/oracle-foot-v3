@@ -3,116 +3,99 @@ import requests
 import random
 from datetime import datetime
 
-st.set_page_config(page_title="ALPHA-ORACLE ELITE", layout="wide")
+st.set_page_config(page_title="ALPHA-ORACLE PRO", layout="wide")
 
 API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 
-# --- DESIGN PROFESSIONNEL ---
+# --- STYLE ---
 st.markdown("""
 <style>
     .stApp { background-color: #0d1117; color: white; }
     .carte-match { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-bottom: 20px; }
-    .score-live { font-size: 40px; font-weight: 900; color: #f85149; text-align: center; }
-    .tableau-ia { width: 100%; margin-top: 15px; border-collapse: collapse; background: rgba(88, 166, 255, 0.05); border-radius: 8px; }
-    .tableau-ia td { padding: 10px; text-align: center; font-weight: bold; border-bottom: 1px solid #30363d; font-size: 14px; }
-    .label-ia { color: #58a6ff; font-size: 11px; text-transform: uppercase; }
-    .label-reel { color: #3fb950; font-size: 11px; text-transform: uppercase; }
-    .vainqueur-box { color: #ffca28; font-size: 16px; border-top: 2px solid #ffca28; padding-top: 5px; }
+    .score-live { font-size: 40px; font-weight: 900; color: #ff0055; text-align: center; }
+    .tableau-ia { width: 100%; margin-top: 15px; border-collapse: collapse; background: rgba(88, 166, 255, 0.05); }
+    .tableau-ia td { padding: 10px; text-align: center; font-weight: bold; border-bottom: 1px solid #333; }
+    .stats-header { background: linear-gradient(90deg, #1f6feb, #238636); padding: 15px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+    .resultat-ia { font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-top: 5px; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- BASE DE DONNÉES DES CLUBS ---
+DATA_CLUBS = {
+    "Real Madrid CF": {"atk": 92, "def": 88, "form": "4-3-3"},
+    "Paris Saint-Germain FC": {"atk": 90, "def": 84, "form": "4-3-3"},
+    "Manchester City FC": {"atk": 94, "def": 90, "form": "4-3-3"},
+    "SL Benfica": {"atk": 81, "def": 79, "form": "4-4-2"},
+}
+DEFAUT = {"atk": 75, "def": 75, "form": "4-4-2"}
+
 @st.cache_data(ttl=60)
-def charger_matchs_universels():
+def charger_matchs():
     headers = {'X-Auth-Token': API_KEY}
-    url = "https://api.football-data.org/v4/matches"
     try:
-        res = requests.get(url, headers=headers).json()
+        res = requests.get("https://api.football-data.org/v4/matches", headers=headers).json()
         return res.get('matches', [])
-    except:
-        return []
+    except: return []
 
-tous_matchs = charger_matchs_universels()
-
-def calcul_ia_complet(m_id, dom_name, ext_name):
+def calcul_ia(m_id, dom, ext):
     random.seed(m_id)
-    # Simulation de puissance
-    score_h = random.randint(0, 3)
-    score_a = random.randint(0, 2)
-    mt_h = random.randint(0, score_h)
-    mt_a = random.randint(0, score_a)
-    
-    # Déterminer le vainqueur pour le tableau
-    if score_h > score_a:
-        vainqueur = dom_name
-    elif score_a > score_h:
-        vainqueur = ext_name
-    else:
-        vainqueur = "MATCH NUL"
-        
-    return f"{mt_h}-{mt_a}", f"{score_h}-{score_a}", vainqueur
+    c1, c2 = DATA_CLUBS.get(dom, DEFAUT), DATA_CLUBS.get(ext, DEFAUT)
+    exp_dom = max(0.5, (c1['atk'] - c2['def']) / 8)
+    exp_ext = max(0.3, (c2['atk'] - c1['def']) / 10)
+    f_dom = sum([1 for _ in range(5) if random.random() < (exp_dom/4)])
+    f_ext = sum([1 for _ in range(5) if random.random() < (exp_ext/4)])
+    mt_dom, mt_ext = random.randint(0, round(f_dom*0.5)), random.randint(0, round(f_ext*0.5))
+    vainqueur = "HOME" if f_dom > f_ext else "AWAY" if f_ext > f_dom else "DRAW"
+    return f"{mt_dom}-{mt_ext}", f"{f_dom}-{f_ext}", vainqueur
 
-def afficher_match_oracle(m):
-    dom = m['homeTeam']['name']
-    ext = m['awayTeam']['name']
-    logo_dom = m['homeTeam'].get('crest', '')
-    logo_ext = m['awayTeam'].get('crest', '')
-    statut = m['status']
+def afficher_match(m, analyse_precision=False):
+    dom, ext = m['homeTeam']['name'], m['awayTeam']['name']
+    ia_mt, ia_ft, ia_v_code = calcul_ia(m['id'], dom, ext)
     
-    # Scores Réels
-    r_mt = f"{m['score']['halfTime']['home'] or 0}-{m['score']['halfTime']['away'] or 0}"
-    r_ft_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0
-    r_ft_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0
+    # Résultat réel pour comparaison
+    r_h, r_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
+    r_v_code = "HOME" if (r_h or 0) > (r_a or 0) else "AWAY" if (r_a or 0) > (r_h or 0) else "DRAW"
     
-    # Pronos IA
-    ia_mt, ia_ft, ia_vainqueur = calcul_ia_complet(m['id'], dom, ext)
-    
+    succes = ia_v_code == r_v_code if m['status'] == 'FINISHED' else None
+    ia_v_nom = dom if ia_v_code == "HOME" else ext if ia_v_code == "AWAY" else "MATCH NUL"
+
     st.markdown(f"""
     <div class="carte-match">
-        <div style="display:flex; justify-content:space-between; color:#8b949e; font-size:12px; margin-bottom:10px;">
-            <span>🕒 {m['utcDate'][11:16]} UTC | {m['competition']['name']}</span>
-            <span style="color:#f85149; font-weight:bold;">{statut}</span>
+        <div style="display:flex; justify-content:space-between; color:#8b949e; font-size:11px;">
+            <span>🕒 {m['utcDate'][11:16]} | {m['status']}</span>
+            {f'<b style="color:#238636;">✅ PRONO CORRECT</b>' if succes else f'<b style="color:#f85149;">❌ ÉCHEC</b>' if succes == False else ''}
         </div>
-        <div style="display:flex; justify-content:space-around; align-items:center; text-align:center;">
-            <div style="width:30%;"><img src="{logo_dom}" width="45"><br><small>{dom[:15]}</small></div>
-            <div style="width:40%;"><div class="score-live">{r_ft_h if statut != 'TIMED' else '?'} - {r_ft_a if statut != 'TIMED' else '?'}</div></div>
-            <div style="width:30%;"><img src="{logo_ext}" width="45"><br><small>{ext[:15]}</small></div>
+        <div style="display:flex; justify-content:space-around; align-items:center; text-align:center; margin-top:10px;">
+            <div style="width:30%;"><img src="{m['homeTeam'].get('crest','')}" width="40"><br><small>{dom[:12]}</small></div>
+            <div style="width:40%;" class="score-live">{r_h if r_h is not None else '?'} - {r_a if r_a is not None else '?'}</div>
+            <div style="width:30%;"><img src="{m['awayTeam'].get('crest','')}" width="40"><br><small>{ext[:12]}</small></div>
         </div>
         <table class="tableau-ia">
-            <tr>
-                <td><span class="label-reel">RÉEL MI-TEMPS</span><br>{r_mt}</td>
-                <td style="border-left: 1px solid #30363d;"><span class="label-ia">IA MI-TEMPS</span><br>{ia_mt}</td>
-            </tr>
-            <tr>
-                <td><span class="label-reel">RÉEL FINAL</span><br>{r_ft_h}-{r_ft_a}</td>
-                <td style="border-left: 1px solid #30363d;"><span class="label-ia">IA FINAL</span><br>{ia_ft}</td>
-            </tr>
-            <tr>
-                <td colspan="2" class="vainqueur-box">
-                    <span style="font-size:10px; color:#aaa;">🏆 VAINQUEUR PRÉDIT :</span><br>
-                    {ia_vainqueur.upper()}
-                </td>
-            </tr>
+            <tr><td style="color:#3fb950;">RÉEL MT: {m['score']['halfTime']['home'] or 0}-{m['score']['halfTime']['away'] or 0}</td><td style="color:#58a6ff;">IA MT: {ia_mt}</td></tr>
+            <tr><td colspan="2" style="color:#ffca28; border-top:1px solid #ffca28;">🏆 PRONO : {ia_v_nom.upper()} ({ia_ft})</td></tr>
         </table>
     </div>
     """, unsafe_allow_html=True)
+    return succes
 
-st.title("🎯 ALPHA-ORACLE : PRONOS & VAINQUEURS")
+# --- LOGIQUE PRINCIPALE ---
+matchs = charger_matchs()
+if matchs:
+    # Calcul de la précision sur les matchs finis
+    matchs_finis = [m for m in matchs if m['status'] == 'FINISHED']
+    scores_ia = [calcul_ia(m['id'], m['homeTeam']['name'], m['awayTeam']['name'])[2] == ("HOME" if (m['score']['fullTime']['home'] or 0) > (m['score']['fullTime']['away'] or 0) else "AWAY" if (m['score']['fullTime']['away'] or 0) > (m['score']['fullTime']['home'] or 0) else "DRAW") for m in matchs_finis]
+    precision = (sum(scores_ia) / len(scores_ia) * 100) if scores_ia else 0
 
-if tous_matchs:
-    tab1, tab2 = st.tabs(["⚽ MATCHS DU JOUR", "📊 HISTORIQUE"])
-    with tab1:
-        # Priorité au direct
-        direct = [m for m in tous_matchs if m['status'] in ['IN_PLAY', 'PAUSED']]
-        a_venir = [m for m in tous_matchs if m['status'] == 'TIMED']
-        if direct:
-            st.subheader("🔴 EN DIRECT")
-            for m in direct: afficher_match_oracle(m)
-        if a_venir:
-            st.subheader("⏳ PROCHAINS MATCHS")
-            for m in a_venir[:20]: afficher_match_oracle(m)
-    with tab2:
-        finis = [m for m in tous_matchs if m['status'] == 'FINISHED']
-        for m in finis[::-1][:20]: afficher_match_oracle(m)
-else:
-    st.error("Aucun match disponible. Vérifie ta connexion ou ta clé API.")
+    st.markdown(f"""
+    <div class="stats-header">
+        <h2 style="margin:0;">🎯 PERFORMANCE DE L'ORACLE</h2>
+        <div style="font-size:24px; font-weight:bold;">{precision:.1f}% de réussite</div>
+        <small>Basé sur les {len(matchs_finis)} derniers matchs terminés</small>
+    </div>
+    """, unsafe_allow_html=True)
 
+    t1, t2 = st.tabs(["⚽ MATCHS EN COURS / À VENIR", "📊 HISTORIQUE & VÉRIFICATION"])
+    with t1:
+        for m in [m for m in matchs if m['status'] != 'FINISHED'][:20]: afficher_match(m)
+    with t2:
+        for m in matchs_finis[::-1][:20]: afficher_match(m)
