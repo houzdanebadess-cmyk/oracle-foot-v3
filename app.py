@@ -1,125 +1,120 @@
 import streamlit as st
 import requests
 import random
-import math
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="ALPHA-ORACLE ELITE", layout="wide")
+# --- CONFIGURATION ÉCRAN ---
+st.set_page_config(page_title="ALPHA-ORACLE ULTRA", layout="wide")
+
 API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 
-# --- STYLE CSS ---
+# --- DESIGN AGRESSIF ET MODERNE ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0d1117; color: white; }
-    .carte-match { background: #1c2128; border: 1px solid #444c56; border-radius: 15px; padding: 20px; margin-bottom: 20px; }
-    .score-live { font-size: 38px; font-weight: 900; color: #f85149; text-align: center; }
-    .badge-formation { background: #30363d; color: #ffca28; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: bold; }
-    .tableau-oracle { width: 100%; margin-top: 15px; border-collapse: collapse; }
-    .tableau-oracle td { padding: 12px; text-align: center; border: 1px solid #30363d; font-weight: bold; }
-    .label-ia { color: #58a6ff; font-size: 11px; }
-    .label-reel { color: #3fb950; font-size: 11px; }
+    .stApp { background-color: #050505; color: white; }
+    .carte-match { 
+        background: linear-gradient(145deg, #111, #1a1a1a); 
+        border-left: 6px solid #ff0055; 
+        border-radius: 12px; 
+        padding: 25px; 
+        margin-bottom: 25px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+    .equipe-nom { font-size: 18px; font-weight: 800; color: #ffffff; }
+    .score-ia { 
+        font-size: 55px; 
+        font-weight: 900; 
+        color: #00ff88; 
+        text-align: center; 
+        letter-spacing: 5px;
+        margin: 10px 0;
+    }
+    .win-prob { 
+        background: #ff0055; 
+        padding: 4px 12px; 
+        border-radius: 20px; 
+        color: white; 
+        font-weight: bold; 
+        font-size: 12px;
+    }
+    .vs-text { color: #444; font-style: italic; }
+    .footer-card { border-top: 1px solid #333; padding-top: 10px; margin-top: 15px; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- BASE DE DONNÉES EXPERT (PUISSANCE & CLASSEMENT) ---
-DB_CLUBS = {
-    "Manchester City": {"rank": 1, "atk": 95, "def": 92, "form": "3-2-4-1"},
-    "Real Madrid": {"rank": 2, "atk": 94, "def": 90, "form": "4-3-1-2"},
-    "Juventus": {"rank": 12, "atk": 85, "def": 88, "form": "3-5-2"},
-    "Liverpool": {"rank": 3, "atk": 91, "def": 88, "form": "4-3-3"},
-    "Paris Saint-Germain": {"rank": 8, "atk": 89, "def": 84, "form": "4-3-3"},
-    "Bayern": {"rank": 4, "atk": 90, "def": 86, "form": "4-2-3-1"},
-    "Flamengo": {"rank": 15, "atk": 82, "def": 78, "form": "4-2-3-1"},
-    "Galatasaray": {"rank": 30, "atk": 80, "def": 75, "form": "4-2-3-1"},
-    "Benfica": {"rank": 20, "atk": 82, "def": 80, "form": "4-2-3-1"}
+# --- MOTEUR DE CALCUL "ULTRA-DOMINATION" ---
+# On booste les stats pour obtenir des scores plus élevés et moins de nuls
+DB_PUISSANCE = {
+    "Real Madrid": {"atk": 98, "def": 92},
+    "Manchester City": {"atk": 99, "def": 94},
+    "Paris Saint-Germain": {"atk": 95, "def": 85},
+    "Bayern": {"atk": 94, "def": 88},
+    "Barcelona": {"atk": 92, "def": 84},
+    "Juventus": {"atk": 89, "def": 91}
 }
-DEFAUT = {"rank": 100, "atk": 72, "def": 72, "form": "4-4-2"}
 
-def trouver_data(nom):
-    for k, v in DB_CLUBS.items():
-        if k.lower() in nom.lower(): return v
-    return DEFAUT
-
-def calcul_expert(m_id, dom, ext):
+def moteur_ultra(m_id, dom, ext):
     random.seed(m_id)
-    d1, d2 = trouver_data(dom), trouver_data(ext)
-    
-    # FORMULE DE POISSON : (Attaque A / Défense B) * Coefficient de Rang
-    # Plus le rank est petit (ex: 1), plus l'équipe est forte
-    coeff_dom = 1.2 if d1['rank'] < d2['rank'] else 0.8
-    coeff_ext = 1.2 if d2['rank'] < d1['rank'] else 0.8
-    
-    exp_h = (d1['atk'] / d2['def']) * coeff_dom + random.uniform(-0.5, 0.5)
-    exp_a = (d2['atk'] / d1['def']) * coeff_ext + random.uniform(-0.5, 0.5)
-    
-    final_h, final_a = max(0, round(exp_h)), max(0, round(exp_a))
-    mt_h, mt_a = random.randint(0, final_h), random.randint(0, final_a)
-    
-    vainqueur = dom if final_h > final_a else ext if final_a > final_h else "MATCH NUL"
-    return f"{mt_h}-{mt_a}", f"{final_h}-{final_a}", vainqueur, d1['form'], d2['form']
+    # Récupération des données ou base "Ultra" par défaut
+    d1 = next((v for k, v in DB_PUISSANCE.items() if k.lower() in dom.lower()), {"atk": 82, "def": 78})
+    d2 = next((v for k, v in DB_PUISSANCE.items() if k.lower() in ext.lower()), {"atk": 80, "def": 76})
 
-@st.cache_data(ttl=60)
-def charger_matchs():
-    headers = {'X-Auth-Token': API_KEY}
+    # Algorithme de Domination Relative
+    # On force l'agressivité avec un multiplicateur de 1.3x pour l'avantage
+    diff_h = (d1['atk'] * 1.3) - d2['def']
+    diff_a = (d2['atk'] * 1.1) - d1['def']
+
+    # Génération des buts (Moteur Ultra : plus de buts, plus d'action)
+    f_h = max(0, round(diff_h / 5.5 + random.uniform(0.5, 2.5)))
+    f_a = max(0, round(diff_a / 7.5 + random.uniform(0, 1.5)))
+
+    # Calcul Probabilité de Victoire
+    prob = round((d1['atk'] / (d1['atk'] + d2['atk'])) * 100 + random.randint(5, 15))
+    prob = min(prob, 99) # Plafond à 99%
+
+    vainqueur = dom if f_h > f_a else ext if f_a > f_h else "MATCH NUL"
+    return f"{f_h} - {f_a}", f"{prob}%", vainqueur
+
+# --- RÉCUPÉRATION DATA ---
+def obtenir_matchs():
     try:
         url = "https://api.football-data.org/v4/matches"
-        return requests.get(url, headers=headers).json().get('matches', [])
-    except: return []
+        headers = {'X-Auth-Token': API_KEY}
+        res = requests.get(url, headers=headers).json()
+        return res.get('matches', [])
+    except:
+        return []
 
-def afficher_carte(m):
-    dom, ext = m['homeTeam']['name'], m['awayTeam']['name']
-    mt_ia, ft_ia, v_ia, f1, f2 = calcul_expert(m['id'], dom, ext)
+# --- INTERFACE PRINCIPALE ---
+st.title("⚡ ALPHA-ORACLE : ULTRA ENGINE V4")
+st.markdown("---")
+
+tous_matchs = obtenir_matchs()
+
+if tous_matchs:
+    # Filtrer pour ne montrer que les matchs intéressants (Direct ou à venir)
+    matchs_actifs = [m for m in tous_matchs if m['status'] != 'FINISHED'][:30]
     
-    r_h, r_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
-    r_mt = f"{m['score']['halfTime']['home'] or 0}-{m['score']['halfTime']['away'] or 0}"
-    
-    st.markdown(f"""
-    <div class="carte-match">
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:#8b949e; margin-bottom:15px;">
-            <span>🕒 {m['utcDate'][11:16]} | {m['competition']['name']}</span>
-            <span style="color:#f85149; font-weight:bold;">{m['status']}</span>
-        </div>
-        <div style="display:flex; justify-content:space-around; align-items:center; text-align:center;">
-            <div style="width:35%;">
-                <img src="{m['homeTeam'].get('crest','')}" width="45"><br>
-                <b style="font-size:13px;">{dom[:14]}</b><br><span class="badge-formation">{f1}</span>
+    for m in matchs_actifs:
+        dom_name = m['homeTeam']['name']
+        ext_name = m['awayTeam']['name']
+        score_ia, certitude, winner = moteur_ultra(m['id'], dom_name, ext_name)
+        
+        st.markdown(f"""
+        <div class="carte-match">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="equipe-nom">{dom_name}</span>
+                <span class="vs-text">VS</span>
+                <span class="equipe-nom">{ext_name}</span>
+                <span class="win-prob">FIABILITÉ : {certitude}</span>
             </div>
-            <div style="width:30%;" class="score-live">{r_h if r_h is not None else '?'} - {r_a if r_a is not None else '?'}</div>
-            <div style="width:35%;">
-                <img src="{m['awayTeam'].get('crest','')}" width="45"><br>
-                <b style="font-size:13px;">{ext[:14]}</b><br><span class="badge-formation">{f2}</span>
+            <div class="score-ia">{score_ia}</div>
+            <div class="footer-card">
+                <span style="color:#ffca28; font-weight:bold;">VAINQUEUR PRÉDIT : {winner.upper()}</span>
+                <br><small style="color:#666;">STATUT : {m['status']} | {m['competition']['name']}</small>
             </div>
         </div>
-        <table class="tableau-oracle">
-            <tr>
-                <td><span class="label-reel">RÉEL MT</span><br>{r_mt}</td>
-                <td style="background: rgba(88,166,255,0.1);"><span class="label-ia">ORACLE MT</span><br>{mt_ia}</td>
-            </tr>
-            <tr>
-                <td><span class="label-reel">RÉEL FINAL</span><br>{r_h if r_h is not None else 0}-{r_a if r_a is not None else 0}</td>
-                <td style="background: rgba(88,166,255,0.1);"><span class="label-ia">ORACLE FINAL</span><br>{ft_ia}</td>
-            </tr>
-            <tr><td colspan="2" style="color:#ffca28; border-top:1px solid #ffca28; padding:10px;">🎯 PRONO : {v_ia.upper()}</td></tr>
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- INTERFACE ---
-st.title("🎯 ALPHA-ORACLE ELITE")
-matchs = charger_matchs()
-
-if matchs:
-    tab1, tab2, tab3 = st.tabs(["⚽ MATCHS DU JOUR", "📅 CALENDRIER", "📊 HISTORIQUE"])
-    with tab1:
-        en_direct = [m for m in matchs if m['status'] in ['IN_PLAY', 'PAUSED']]
-        if en_direct:
-            for m in en_direct: afficher_carte(m)
-        else: st.info("Pas de matchs en direct.")
-    with tab2:
-        avenir = [m for m in matchs if m['status'] == 'TIMED']
-        for m in avenir[:15]: afficher_carte(m)
-    with tab3:
-        finis = [m for m in matchs if m['status'] == 'FINISHED']
-        for m in finis[::-1][:15]: afficher_carte(m)
+        """, unsafe_allow_html=True)
 else:
-    st.error("Erreur API ou aucun match.")
+    st.error("Impossible de charger les données. Vérifiez votre clé API ou votre connexion.")
+
+st.sidebar.info("Moteur Ultra : Activé (Mode Domination)")
