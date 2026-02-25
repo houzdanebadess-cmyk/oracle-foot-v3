@@ -125,3 +125,4 @@ if matchs:
     with t2:
         for m in [m for m in matchs if m['status'] == 'FINISHED'][::-1][:20]:
             afficher_match(m)
+
