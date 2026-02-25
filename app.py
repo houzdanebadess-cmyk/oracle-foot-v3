@@ -86,3 +86,4 @@ if stats and matches:
     st.markdown('<div class="footer">🚀 ALPHA-ORACLE by Houzdane.Bdess</div>', unsafe_allow_html=True)
 else:
     st.error("Connexion à l'API impossible. Réessaie dans 1 minute.")
+
