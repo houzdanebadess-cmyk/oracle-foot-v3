@@ -89,3 +89,4 @@ else:
 
 st.markdown("<br><center>🚀 ALPHA-ORACLE AUTOMATISÉ</center>", unsafe_allow_html=True)
 
+
