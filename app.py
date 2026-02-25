@@ -1,26 +1,31 @@
 import streamlit as st
 import requests
-import math
 import random
 from datetime import datetime
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="ALPHA-ORACLE ELITE", layout="wide")
+st.set_page_config(page_title="ALPHA-ORACLE V3", layout="wide")
 
 API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 
-# --- STYLE CSS ---
+# --- STYLE CSS (SIGNATURE INCLUSE) ---
 st.markdown("""
 <style>
     .stApp { background: #0f0c29; color: white; }
-    .card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid #00f2fe;
-        border-radius: 20px;
-        padding: 20px;
-        margin-bottom: 20px;
+    .card { background: rgba(255, 255, 255, 0.05); border: 1px solid #00f2fe; border-radius: 15px; padding: 15px; margin-bottom: 15px; }
+    .score-exact { font-size: 32px; color: #00f2fe; font-weight: bold; text-align: center; }
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: rgba(15, 12, 41, 0.9);
+        color: #00f2fe;
+        text-align: center;
+        padding: 10px;
+        font-family: 'Orbitron', sans-serif;
+        font-size: 14px;
+        border-top: 1px solid #00f2fe;
     }
-    .score { font-size: 40px; color: #00f2fe; font-weight: bold; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -28,68 +33,59 @@ st.markdown("""
 def get_data():
     headers = {'X-Auth-Token': API_KEY}
     try:
-        s = requests.get("https://api.football-data.org/v4/competitions/FL1/standings", headers=headers).json()
-        m = requests.get("https://api.football-data.org/v4/competitions/FL1/matches", headers=headers).json()
-        return s['standings'][0]['table'], m['matches']
+        standings = requests.get("https://api.football-data.org/v4/competitions/FL1/standings", headers=headers).json()
+        matches = requests.get("https://api.football-data.org/v4/competitions/FL1/matches", headers=headers).json()
+        return standings['standings'][0]['table'], matches['matches']
     except: return None, None
 
-table, matches = get_data()
+table, all_matches = get_data()
 
-if table and matches:
-    stats = {t['team']['name']: {'att': t['goalsFor']/t['playedGames'], 'def': t['goalsAgainst']/t['playedGames'], 'logo': t['team']['crest'], 'rank': t['position']} for t in table}
+def predict_score(h_n, a_n, stats):
+    exp_h = (stats[h_n]['gf'] + stats[a_n]['ga']) / 2
+    exp_a = (stats[a_n]['gf'] + stats[h_n]['ga']) / 2
+    return max(0, round(exp_h * 1.1 + random.uniform(-0.5, 0.5))), max(0, round(exp_a + random.uniform(-0.5, 0.5)))
+
+if table and all_matches:
+    stats = {t['team']['name']: {
+        'logo': t['team']['crest'], 
+        'gf': t['goalsFor'] / max(1, t['playedGames']),
+        'ga': t['goalsAgainst'] / max(1, t['playedGames'])
+    } for t in table}
+
+    st.title("🎯 ALPHA-ORACLE : PRÉDICTIONS vs RÉALITÉ")
     
-    st.markdown("<h1 style='text-align:center; color:#00f2fe;'>ALPHA-ORACLE V3</h1>", unsafe_allow_html=True)
-    
-    search = st.text_input("🔍 RECHERCHER...").lower()
-    upcoming = [m for m in matches if m['status'] in ['TIMED', 'SCHEDULED', 'IN_PLAY'] and (search in m['homeTeam']['name'].lower() or search in m['awayTeam']['name'].lower())]
+    tab1, tab2 = st.tabs(["🔮 PRÉDICTIONS", "📊 COMPARATEUR"])
 
-    for m in upcoming:
-        h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
-        if h_n in stats and a_n in stats:
-            # --- LOGIQUE IA ---
-            diff = stats[a_n]['rank'] - stats[h_n]['rank']
-            l_h = ((stats[h_n]['att'] + stats[a_n]['def']) / 2) + (diff * 0.08) + random.uniform(-0.2, 0.3)
-            l_a = ((stats[a_n]['att'] + stats[h_n]['def']) / 2) - (diff * 0.04) + random.uniform(-0.2, 0.2)
-            
-            t_h, t_a = max(0, round(l_h)), max(0, round(l_a))
-            
-            # Mi-temps
-            s1_h = 1 if t_h >= 2 else (1 if t_h == 1 and random.random() > 0.5 else 0)
-            s1_a = 1 if t_a >= 2 else (0 if t_a == 1 else 0)
-            s2_h, s2_a = t_h - s1_h, t_a - s1_a
-            
-            dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
+    with tab1:
+        search = st.text_input("🔍 Équipe...").lower()
+        upcoming = [m for m in all_matches if m['status'] in ['TIMED', 'SCHEDULED', 'IN_PLAY']]
+        for m in upcoming:
+            h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
+            if (search in h_n.lower() or search in a_n.lower()) and h_n in stats and a_n in stats:
+                p_h, p_a = predict_score(h_n, a_n, stats)
+                st.markdown(f"""<div class="card"><div style="display:flex; justify-content:space-around; align-items:center;">
+                    <div style="text-align:center; width:30%;"><img src="{stats[h_n]['logo']}" width="50"><br>{h_n}</div>
+                    <div style="text-align:center;"><div style="font-size:10px; color:#00f2fe;">PRÉDICTION</div><div class="score-exact">{p_h} - {p_a}</div></div>
+                    <div style="text-align:center; width:30%;"><img src="{stats[a_n]['logo']}" width="50"><br>{a_n}</div>
+                </div></div>""", unsafe_allow_html=True)
 
-            # --- AFFICHAGE CARTE ---
-            carte_html = f"""
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; color:#00f2fe; font-size:12px;">
-                    <span>📅 {dt.strftime('%d/%m/%Y')}</span>
-                    <span>🕒 {dt.strftime('%H:%M')}</span>
-                </div>
-                <div style="display:flex; justify-content:space-around; align-items:center; margin:15px 0;">
-                    <div style="text-align:center;"><img src="{stats[h_n]['logo']}" width="60"><br>{h_n}</div>
-                    <div class="score">{t_h} - {t_a}</div>
-                    <div style="text-align:center;"><img src="{stats[a_n]['logo']}" width="60"><br>{a_n}</div>
-                </div>
-                <div style="display:flex; justify-content:space-between; font-size:13px; border-top:1px solid rgba(255,255,255,0.1); padding-top:10px;">
-                    <div style="text-align:center; width:48%;">1ère MT: <b>{s1_h}-{s1_a}</b></div>
-                    <div style="text-align:center; width:48%;">2ème MT: <b>{s2_h}-{s2_a}</b></div>
-                </div>
-            </div>
-            """
-            st.markdown(carte_html, unsafe_allow_html=True)
-            
-            # --- SECTION ANALYSE AVEC FIABILITÉ ---
-            with st.expander("👁️ ANALYSE DU MATCH"):
-                # Calcul de la fiabilité dynamique
-                fiabilite = random.randint(78, 96) if abs(diff) > 5 else random.randint(65, 85)
-                vainqueur = h_n if t_h > t_a else (a_n if t_a > t_h else "Match Nul")
-                
-                st.write(f"🏆 **Vainqueur probable :** {vainqueur}")
-                st.metric(label="📊 FIABILITÉ DE LA PRÉDICTION", value=f"{fiabilite}%")
-                st.progress(fiabilite / 100) # Barre de progression visuelle
-                st.caption("L'indice de fiabilité est calculé selon l'écart de classement et la forme actuelle.")
+    with tab2:
+        search2 = st.text_input("🔍 Comparaison...").lower()
+        past = [m for m in all_matches if m['status'] == 'FINISHED'][::-1]
+        for m in past[:15]:
+            h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
+            if (search2 in h_n.lower() or search2 in a_n.lower()) and h_n in stats and a_n in stats:
+                p_h, p_a = predict_score(h_n, a_n, stats)
+                real_h, real_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
+                win_color = "#00ff88" if (real_h > real_a and p_h > p_a) or (real_h < real_a and p_h < p_a) or (real_h == real_a and p_h == p_a) else "#ff4444"
+                st.markdown(f"""<div class="card" style="border-left: 5px solid {win_color};">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span>{h_n} <b>{real_h} - {real_a}</b> {a_n}</span>
+                        <span style="color:{win_color}; font-size:11px;">🤖 PRÉDICTION : {p_h}-{p_a}</span>
+                    </div></div>""", unsafe_allow_html=True)
+
+    # --- TA SIGNATURE EN BAS ---
+    st.markdown("""<div class="footer">🚀 Codé avec Houzdane.Bdess</div>""", unsafe_allow_html=True)
 
 else:
-    st.error("Impossible de charger les données.")
+    st.error("Données indisponibles.")
