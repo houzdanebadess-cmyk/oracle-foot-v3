@@ -88,3 +88,4 @@ else:
     st.error("Données indisponibles. Réessaie dans une minute.")
 
 st.markdown("<br><center>🚀 ALPHA-ORACLE AUTOMATISÉ</center>", unsafe_allow_html=True)
+
