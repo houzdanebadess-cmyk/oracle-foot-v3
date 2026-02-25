@@ -3,108 +3,192 @@ import requests
 import random
 from datetime import datetime
 
-st.set_page_config(page_title="ALPHA-ORACLE ELITE", layout="wide")
+# Config de la page
+st.set_page_config(page_title="ALPHA-ORACLE", layout="wide")
 
 API_KEY = '0d92c9d206f74cb3abd38b7b7ba2d873'
 
-# --- STYLE CSS ---
+# --- STYLE VISUEL (PROPRE ET FRANÇAIS) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0f0c29; color: white; }
-    .match-card { background: rgba(255,255,255,0.05); border: 1px solid #00f2fe; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
-    .score-live { font-size: 35px; color: #ff0055; font-weight: bold; }
-    .score-finished { font-size: 35px; color: #25d366; font-weight: bold; }
-    .prono-box { background: rgba(0,242,254,0.1); border-radius: 8px; padding: 10px; margin-top: 10px; border: 1px solid #00f2fe; }
-    .prono-title { color: #00f2fe; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
-    .prono-value { font-size: 16px; font-weight: bold; color: white; }
+    .stApp { background-color: #0d1117; color: white; }
+    .carte-match { 
+        background: #161b22; 
+        border: 2px solid #30363d; 
+        border-radius: 15px; 
+        padding: 20px; 
+        margin-bottom: 25px; 
+    }
+    .score-geant { 
+        font-size: 45px; 
+        font-weight: 900; 
+        color: #f85149; 
+        text-align: center;
+    }
+    .nom-equipe { font-size: 16px; font-weight: bold; margin-top: 10px; }
+    
+    /* Tableau de comparaison */
+    .tableau-oracle { 
+        width: 100%; 
+        margin-top: 20px; 
+        border-collapse: collapse; 
+        background: rgba(88, 166, 255, 0.05); 
+        border-radius: 10px;
+    }
+    .tableau-oracle th { color: #8b949e; font-size: 12px; padding: 10px; border-bottom: 1px solid #30363d; }
+    .tableau-oracle td { padding: 12px; text-align: center; font-weight: bold; font-size: 16px; border-bottom: 1px solid #21262d; }
+    
+    .label-ia { color: #58a6ff; } /* Bleu pour l'IA */
+    .label-reel { color: #3fb950; } /* Vert pour le Réel */
+    .direct-badge { color: #f85149; font-weight: bold; animation: clignote 1s infinite; }
+    @keyframes clignote { 50% { opacity: 0.3; } }
 </style>
 """, unsafe_allow_html=True)
 
 @st.cache_data(ttl=60)
-def get_data():
+def charger_donnees():
     headers = {'X-Auth-Token': API_KEY}
-    all_m, logos, stats = [], {}, {}
-    try:
-        for lg in ['FL1', 'PL', 'CL']:
-            s_req = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/standings", headers=headers).json()
-            if 'standings' in s_req:
-                for t in s_req['standings'][0]['table']:
-                    team_n = t['team']['name']
-                    logos[team_n] = t['team']['crest']
-                    stats[team_n] = {'gf': t['goalsFor']/max(1,t['playedGames']), 'ga': t['goalsAgainst']/max(1,t['playedGames']), 'rank': t['position']}
-            m_req = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/matches", headers=headers).json()
-            if 'matches' in m_req: all_m.extend(m_req['matches'])
-        return all_m, logos, stats
-    except: return [], {}, {}
-
-matches, logos, team_stats = get_data()
-
-def predict_double(h, a, m_id):
-    # Calcul intelligent MT et FT
-    random.seed(m_id)
-    if h in team_stats and a in team_stats:
-        # Force offensive
-        pwr_h = (team_stats[h]['gf'] + team_stats[a]['ga']) / 2
-        pwr_a = (team_stats[a]['gf'] + team_stats[h]['ga']) / 2
-        # Score Final (FT)
-        ft_h, ft_a = round(pwr_h + random.uniform(-0.5, 0.5)), round(pwr_a + random.uniform(-0.5, 0.5))
-        # Score Mi-temps (MT) - Souvent 0-0, 1-0 ou 0-1
-        mt_h = random.randint(0, ft_h)
-        mt_a = random.randint(0, ft_a)
-        return f"{mt_h}-{mt_a}", f"{ft_h}-{ft_a}"
-    return "0-0", "1-1"
-
-def draw_match(m):
-    h, a = m['homeTeam']['name'], m['awayTeam']['name']
-    h_logo, a_logo = logos.get(h, ""), logos.get(a, "")
-    status = m['status']
+    matchs_liste, logos, stats = [], {}, {}
+    # Ligues : France (FL1), Angleterre (PL), Champions League (CL)
+    ligues = ['FL1', 'PL', 'CL']
     
-    # Réel
-    mt_real = f"{m['score']['halfTime']['home'] or 0} - {m['score']['halfTime']['away'] or 0}"
-    ft_h = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0
-    ft_a = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0
+    for lg in ligues:
+        try:
+            # Récupérer classement pour l'intelligence de l'IA
+            classement = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/standings", headers=headers).json()
+            if 'standings' in classement:
+                for equipe in classement['standings'][0]['table']:
+                    nom = equipe['team']['name']
+                    logos[nom] = equipe['team']['crest']
+                    stats[nom] = {
+                        'buts_marques': equipe['goalsFor'] / max(1, equipe['playedGames']),
+                        'buts_encaisses': equipe['goalsAgainst'] / max(1, equipe['playedGames']),
+                        'rang': equipe['position']
+                    }
+            
+            # Récupérer les matchs
+            r_matchs = requests.get(f"https://api.football-data.org/v4/competitions/{lg}/matches", headers=headers).json()
+            if 'matches' in r_matchs:
+                matchs_liste.extend(r_matchs['matches'])
+        except:
+            pass
+    return matchs_liste, logos, stats
+
+matchs, logos_equipes, stats_equipes = charger_donnees()
+
+def predire_score_intelligent(domicile, exterieur, id_match):
+    random.seed(id_match)
+    # On récupère les stats ou on met des valeurs par défaut
+    s1 = stats_equipes.get(domicile, {'buts_marques': 1.2, 'buts_encaisses': 1.2, 'rang': 10})
+    s2 = stats_equipes.get(exterieur, {'buts_marques': 1.0, 'buts_encaisses': 1.4, 'rang': 15})
     
-    # IA Prono
-    p_mt, p_ft = predict_double(h, a, m['id'])
+    # Calcul Score Final (FT)
+    score_f_dom = round((s1['buts_marques'] + s2['buts_encaisses']) / 2 + (0.5 if s1['rang'] < s2['rang'] else 0))
+    score_f_ext = round((s2['buts_marques'] + s1['buts_encaisses']) / 2)
     
+    # Calcul Mi-temps (MT) - Toujours inférieur ou égal au final
+    score_m_dom = random.randint(0, score_f_dom)
+    score_m_ext = random.randint(0, score_f_ext)
+    
+    return f"{score_m_dom}-{score_m_ext}", f"{score_f_dom}-{score_f_ext}"
+
+def afficher_match(m):
+    equipe_dom = m['homeTeam']['name']
+    equipe_ext = m['awayTeam']['name']
+    logo_dom = logos_equipes.get(equipe_dom, "")
+    logo_ext = logos_equipes.get(equipe_ext, "")
+    statut = m['status']
+    
+    # Heure et Date
+    dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
+    heure = dt.strftime("%H:%M")
+    date_f = dt.strftime("%d/%m")
+    
+    # Scores RÉELS
+    score_m_reel = f"{m['score']['halfTime']['home'] or 0} - {m['score']['halfTime']['away'] or 0}"
+    score_f_dom_reel = m['score']['fullTime']['home'] if m['score']['fullTime']['home'] is not None else 0
+    score_f_ext_reel = m['score']['fullTime']['away'] if m['score']['fullTime']['away'] is not None else 0
+    
+    # Prédictions IA
+    ia_mt, ia_ft = predire_score_intelligent(equipe_dom, equipe_ext, m['id'])
+    
+    # Traduction statut
+    statut_fr = "EN DIRECT" if statut in ["IN_PLAY", "PAUSED"] else "TERMINÉ" if statut == "FINISHED" else "À VENIR"
+    badge_classe = "direct-badge" if statut_fr == "EN DIRECT" else ""
+
     st.markdown(f"""
-    <div class="match-card">
-        <div style="display:flex; justify-content:space-between; font-size:11px; color:#888; margin-bottom:10px;">
-            <span>🕒 {m['utcDate'][11:16]} UTC</span>
-            <span style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px;">RÉEL MT: {mt_real}</span>
+    <div class="carte-match">
+        <div style="display:flex; justify-content:space-between; color:#8b949e; font-size:12px; margin-bottom:15px;">
+            <span>📅 {date_f} | 🕒 {heure} UTC</span>
+            <span class="{badge_classe}">{statut_fr}</span>
         </div>
-        <div style="display:flex; justify-content:space-around; align-items:center;">
-            <div style="text-align:center; width:25%;"><img src="{h_logo}" width="45"><br><small>{h[:10]}</small></div>
-            <div style="text-align:center; width:50%;">
-                <div class="{'score-live' if status == 'IN_PLAY' else 'score-finished'}">
-                    {ft_h if status != 'TIMED' else p_ft}
-                </div>
-                <div class="prono-box">
-                    <div style="display:flex; justify-content:space-around;">
-                        <div>
-                            <div class="prono-title">Prono MT</div>
-                            <div class="prono-value">{p_mt}</div>
-                        </div>
-                        <div style="border-left:1px solid #00f2fe; height:25px; margin-top:5px;"></div>
-                        <div>
-                            <div class="prono-title">Prono FT</div>
-                            <div class="prono-value">{p_ft}</div>
-                        </div>
-                    </div>
+        
+        <div style="display:flex; justify-content:space-around; align-items:center; text-align:center;">
+            <div style="width:30%;">
+                <img src="{logo_dom}" width="55"><br>
+                <div class="nom-equipe">{equipe_dom[:15]}</div>
+            </div>
+            <div style="width:40%;">
+                <div class="score-geant">
+                    {score_f_dom_reel if statut != 'TIMED' else '?'} - {score_f_ext_reel if statut != 'TIMED' else '?'}
                 </div>
             </div>
-            <div style="text-align:center; width:25%;"><img src="{a_logo}" width="45"><br><small>{a[:10]}</small></div>
+            <div style="width:30%;">
+                <img src="{logo_ext}" width="55"><br>
+                <div class="nom-equipe">{equipe_ext[:15]}</div>
+            </div>
         </div>
+
+        <table class="tableau-oracle">
+            <tr>
+                <th>PÉRIODE</th>
+                <th class="label-reel">RÉEL (LIVE)</th>
+                <th class="label-ia">ORACLE IA 🧠</th>
+            </tr>
+            <tr>
+                <td>1ère Mi-temps</td>
+                <td class="label-reel">{score_m_reel}</td>
+                <td class="label-ia">{ia_mt}</td>
+            </tr>
+            <tr>
+                <td>Score Final</td>
+                <td class="label-reel">{score_f_dom_reel}-{score_f_ext_reel}</td>
+                <td class="label-ia">{ia_ft}</td>
+            </tr>
+        </table>
     </div>
     """, unsafe_allow_html=True)
 
+# --- INTERFACE PRINCIPALE ---
 st.title("🎯 ALPHA-ORACLE ELITE")
-if matches:
-    tabs = st.tabs(["⚽ AUJOURD'HUI", "📅 CALENDRIER", "📊 COMPARATEUR"])
-    day = datetime.utcnow().strftime('%Y-%m-%d')
-    with tabs[0]:
-        for m in [m for m in matches if m['utcDate'].startswith(day)]: draw_match(m)
-    with tabs[1]:
-        for m in [m for m in matches if m['status'] == 'TIMED' and not m['utcDate'].startswith(day)][:10]: draw_match(m)
-    with tabs[2]:
-        for m in [m for m in matches if m['status'] == 'FINISHED' and not m['utcDate'].startswith(day)][::-1][:10]: draw_match(m)
+
+if matchs:
+    # Navigation en français
+    onglets = st.tabs(["⚽ MATCHS DU JOUR", "📅 CALENDRIER", "📊 COMPARATEUR"])
+    maintenant = datetime.utcnow().strftime('%Y-%m-%d')
+    
+    with onglets[0]:
+        # On affiche le direct en priorité
+        en_direct = [m for m in matchs if m['status'] in ['IN_PLAY', 'PAUSED']]
+        aujourdhui = [m for m in matchs if m['utcDate'].startswith(maintenant) and m not in en_direct]
+        
+        if en_direct:
+            st.subheader("🔴 MATCHS EN DIRECT")
+            for m in en_direct: afficher_match(m)
+        
+        if aujourdhui:
+            st.subheader("📅 PROGRAMMÉS AUJOURD'HUI")
+            for m in aujourdhui: afficher_match(m)
+            
+        if not en_direct and not aujourdhui:
+            st.info("Aucun match majeur prévu pour aujourd'hui.")
+
+    with onglets[1]:
+        futur = [m for m in matchs if m['status'] == 'TIMED' and not m['utcDate'].startswith(maintenant)]
+        for m in futur[:15]: afficher_match(m)
+
+    with onglets[2]:
+        passes = [m for m in matchs if m['status'] == 'FINISHED' and not m['utcDate'].startswith(maintenant)][::-1]
+        for m in passes[:15]: afficher_match(m)
+else:
+    st.error("Connexion impossible avec l'API Football. Vérifie ta clé.")
