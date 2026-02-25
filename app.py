@@ -19,7 +19,6 @@ st.markdown("""
         background-color: rgba(15, 12, 41, 0.95); color: #00f2fe;
         text-align: center; padding: 10px; font-weight: bold; border-top: 1px solid #00f2fe; z-index: 999;
     }
-    /* Style du bouton WhatsApp */
     .btn-share {
         background-color: #25d366 !important;
         color: white !important;
@@ -29,7 +28,6 @@ st.markdown("""
         font-weight: bold !important;
         font-size: 14px !important;
         display: inline-block !important;
-        margin-bottom: 10px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -73,7 +71,6 @@ if stats and all_matches:
     now = datetime.utcnow()
     today_str = now.strftime('%Y-%m-%d')
 
-    # --- ONGLET 1 : JOUR J ---
     with tab1:
         today_matches = [m for m in all_matches if m['utcDate'].startswith(today_str)]
         if not today_matches: st.info("Pas de matchs majeurs aujourd'hui.")
@@ -81,64 +78,47 @@ if stats and all_matches:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
             p_h, p_a = predict_score(h_n, a_n, stats)
-            
-            text_whatsapp = f"⚽ Prono Houzdane.Bdess : {h_n} {p_h}-{p_a} {a_n} ! Analysé par ALPHA-ORACLE"
-            link_whatsapp = f"https://wa.me/?text={urllib.parse.quote(text_whatsapp)}"
-
+            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ Prono Houzdane.Bdess : {h_n} {p_h}-{p_a} {a_n}')}"
             st.markdown(f"""
             <div class="card">
-                <div style="display:flex; justify-content:space-between;">
-                    <span style="color:#ff0055; font-weight:bold;">🕒 Aujourd'hui {dt.strftime('%H:%M')}</span>
-                    <a href="{link_whatsapp}" target="_blank" class="btn-share">📲 PARTAGER PRONO</a>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#ff0055; font-weight:bold;">🕒 {dt.strftime('%H:%M')}</span>
+                    <a href="{link_wa}" target="_blank" class="btn-share">📲 PARTAGER</a>
                 </div>
                 <div style="display:flex; justify-content:space-around; align-items:center; margin-top:10px;">
-                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="45"><br>{h_n}</div>
+                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="40"><br>{h_n}</div>
                     <div class="score-exact">{p_h} - {p_a}</div>
-                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="45"><br>{a_n}</div>
+                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="40"><br>{a_n}</div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
-    # --- ONGLET 2 : FUTUR ---
     with tab2:
         upcoming = [m for m in all_matches if m['status'] in ['TIMED', 'SCHEDULED'] and not m['utcDate'].startswith(today_str)]
         for m in upcoming[:10]:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ")
             p_h, p_a = predict_score(h_n, a_n, stats)
-            
-            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ {h_n} vs {a_n} : {p_h}-{p_a} (IA Houzdane)')}"
-
+            link_wa = f"https://wa.me/?text={urllib.parse.quote(f'⚽ {h_n} vs {a_n} : {p_h}-{p_a}')}"
             st.markdown(f"""
             <div class="card">
-                <div style="display:flex; justify-content:space-between;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span style="color:#aaa;">📅 {dt.strftime('%d/%m à %H:%M')}</span>
                     <a href="{link_wa}" target="_blank" class="btn-share">📲 PARTAGER</a>
                 </div>
                 <div style="display:flex; justify-content:space-around; align-items:center; margin-top:5px;">
-                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="40"><br><small>{h_n}</small></div>
+                    <div style="text-align:center;"><img src="{stats.get(h_n,{}).get('logo','')}" width="35"><br><small>{h_n}</small></div>
                     <div style="font-size:24px; font-weight:bold; color:#00f2fe;">{p_h} - {p_a}</div>
-                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="40"><br><small>{a_n}</small></div>
+                    <div style="text-align:center;"><img src="{stats.get(a_n,{}).get('logo','')}" width="35"><br><small>{a_n}</small></div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+            </div>""", unsafe_allow_html=True)
 
-    # --- ONGLET 3 : COMPARATEUR ---
     with tab3:
         past = [m for m in all_matches if m['status'] == 'FINISHED'][::-1]
         for m in past[:15]:
             h_n, a_n = m['homeTeam']['name'], m['awayTeam']['name']
             r_h, r_a = m['score']['fullTime']['home'], m['score']['fullTime']['away']
-            st.markdown(f"""
-            <div class="card" style="border-color:#333;">
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <img src="{stats.get(h_n,{}).get('logo','')}" width="25">
-                    <span>{h_n} <b>{r_h} - {r_a}</b> {a_n}</span>
-                    <img src="{stats.get(a_n,{}).get('logo','')}" width="25">
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div class="card"><div style="display:flex; align-items:center; gap:15px;"><img src="{stats.get(h_n,{}).get('logo','')}" width="20"> {h_n} <b>{r_h} - {r_a}</b> {a_n} <img src="{stats.get(a_n,{}).get('logo','')}" width="20"></div></div>""", unsafe_allow_html=True)
 
-    st.markdown("""<div class="footer">🚀 Codé avec Houzdane.Bdess</div>""", unsafe_allow_html=True)
+    st.markdown("""<div style="height:80px;"></div><div class="footer">🚀 ALPHA-ORACLE by Houzdane.Bdess</div>""", unsafe_allow_html=True)
 else:
-    st.error("Données indisponibles. Attends 1 minute.")nnées indisponibles.")
+    st.error("Données indisponibles pour le moment.")
